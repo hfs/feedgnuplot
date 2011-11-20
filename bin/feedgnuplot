@@ -200,9 +200,6 @@ sub interpretCommandline
     print STDERR "--xlen does not make sense without --stream\n";
     exit -1;
   }
-
-  # --xlen implies an order to the data, so I force monotonicity
-  $options{monotonic} = 1 if defined $options{xlen};
 }
 
 sub getGnuplotVersion
@@ -472,8 +469,8 @@ sub mainThread
 
         if( $options{xlen} )
         {
-          pruneOldData($domain[0] - $options{xlen});
-          plotStoredData($domain[0] - $options{xlen}, $domain[0]);
+          pruneOldData($options{xlen});
+          plotStoredData($options{xlen});
         }
         else
         { plotStoredData(); }
@@ -503,24 +500,20 @@ sub mainThread
 
 sub pruneOldData
 {
-  my ($oldestx) = @_;
+  my ($len) = @_;
 
   foreach my $curve (@curves)
   {
     if( @$curve > 1 )
     {
-      if( my $firstInWindow = first {$curve->[$_][0] >= $oldestx} 1..$#$curve )
-      { splice( @$curve, 1, $firstInWindow-1 ); }
-      else
-      { splice( @$curve, 1); }
+      splice( @$curve, 1, -$len );
     }
   }
 }
 
 sub plotStoredData
 {
-  my ($xmin, $xmax) = @_;
-  print PIPE "set xrange [$xmin:$xmax]\n" if defined $xmin;
+  my ($xlen) = @_;
 
   # get the options for those curves that have any data
   my @nonemptyCurves = grep {@$_ > 1} @curves;
@@ -534,7 +527,9 @@ sub plotStoredData
   {
     # send each point to gnuplot. Ignore the first "point" since it's the
     # curve options
-    for my $elem (@{$buf}[1..$#$buf])
+    my $fromIdx = $#$buf - (defined $xlen ? $xlen : 1);
+    $fromIdx = 1 if $fromIdx < 1;
+    for my $elem (@{$buf}[$fromIdx..$#$buf])
     {
       print PIPE "@$elem\n";
     }
